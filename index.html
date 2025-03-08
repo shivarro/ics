@@ -123,6 +123,7 @@
         'HyGuru': [],
         'First Aid': [],
         'UWorld': [],
+        'Divine': [],
         'Other': []
       };
       events.forEach(event => {
@@ -132,6 +133,8 @@
           groups['First Aid'].push(event);
         } else if (event.summary.startsWith('UWorld')) {
           groups['UWorld'].push(event);
+        } else if (event.summary.startsWith('Divine')) {
+          groups['Divine'].push(event);
         } else {
           groups['Other'].push(event);
         }
