@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>ICS Widget</title>
+  <title>ICS Widget with Firebase Persistence</title>
   <style>
     /* Modern sleek dark theme */
     body {
@@ -57,11 +57,41 @@
 
   <!-- Include ical.js from a CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ical.js/1.4.0/ical.min.js"></script>
-  <script>
-    // Your actual ICS calendar URL
+
+  <!-- Main script with Firebase + ICS logic -->
+  <script type="module">
+    /*************************************************************
+     * 1) Import Firebase modules and initialize your Firebase app
+     *************************************************************/
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.16.0/firebase-app.js";
+    import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/9.16.0/firebase-firestore.js";
+
+    // Your Firebase configuration (from your Firebase Console)
+    const firebaseConfig = {
+      apiKey: "AIzaSyDPx-3k2SKrnWSIFV7J_ZAfKacsV0e3o0c",
+      authDomain: "ics2notion.firebaseapp.com",
+      projectId: "ics2notion",
+      storageBucket: "ics2notion.firebasestorage.app",
+      messagingSenderId: "759870762800",
+      appId: "1:759870762800:web:14735c736c8fe1e4ff22f5"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    // Get reference to Firestore
+    const db = getFirestore(app);
+
+    // Collection name in Firestore for storing checkbox states
+    const COLLECTION_NAME = "tasks";
+
+
+    /*************************************************************
+     * 2) ICS-related constants and logic
+     *************************************************************/
+    // Your ICS calendar URL
     const ICS_URL = 'https://api-composite-cf.blueprintprep.com/cal/260d33c5-9c91-4eb5-b63a-f40e522f24bd?k=n-MBcRhe6JZP00Q4IUcbZ4qMxAH_Un-5XT75F4_tLKk%3D&s=8397&t=f';
     
-    // Use the working proxy URL
+    // Proxy to bypass CORS issues
     const proxyBase = 'https://api.cors.lol/?url=';
     const fullUrl = proxyBase + encodeURIComponent(ICS_URL);
 
@@ -69,7 +99,7 @@
     const dateInput = document.getElementById('dateInput');
     dateInput.value = new Date().toISOString().split('T')[0];
 
-    // Fetch the ICS file via the proxy
+    // Fetch ICS file
     function fetchICS(url) {
       return fetch(url)
         .then(response => {
@@ -98,19 +128,26 @@
       selectedDate.setHours(0, 0, 0, 0);
       let nextDate = new Date(selectedDate);
       nextDate.setDate(nextDate.getDate() + 1);
-      
+
       // Define offset: subtract one day
       const offsetDays = -1;
-      
+
       let eventsForDate = [];
       events.forEach(evtComp => {
         const evt = new ICAL.Event(evtComp);
         let start = evt.startDate.toJSDate();
-        // Apply offset by subtracting one day
+
+        // Apply offset
         start.setDate(start.getDate() + offsetDays);
+
         if (start >= selectedDate && start < nextDate) {
+          const summary = evt.summary.trim();
+          // Use summary + '|' + dateStr as doc ID
+          const docId = summary + '|' + dateStr;
+
           eventsForDate.push({
-            summary: evt.summary.trim()
+            summary,
+            docId
           });
         }
       });
@@ -142,8 +179,11 @@
       return groups;
     }
 
-    // Render grouped events on the page with checkboxes
-    function renderEvents(events) {
+
+    /*************************************************************
+     * 3) Render events + Firestore load/save logic
+     *************************************************************/
+    async function renderEvents(events) {
       const eventsDiv = document.getElementById('events');
       if (events.length === 0) {
         eventsDiv.innerHTML = '<p>No events for this day.</p>';
@@ -161,7 +201,7 @@
           eventsDiv.appendChild(header);
 
           // For each event in the group, add a checkbox and task text
-          groupEvents.forEach(event => {
+          for (const event of groupEvents) {
             const eventDiv = document.createElement('div');
             eventDiv.className = 'event';
 
@@ -175,8 +215,27 @@
             span.className = 'event-text';
             span.textContent = event.summary;
 
-            // Toggle style on checkbox change
-            checkbox.addEventListener('change', () => {
+            // Firestore doc reference
+            const docRef = doc(db, COLLECTION_NAME, event.docId);
+
+            // 1) Load the stored check state from Firestore
+            try {
+              const docSnap = await getDoc(docRef);
+              if (docSnap.exists()) {
+                const data = docSnap.data();
+                const isChecked = data.checked === true;
+                checkbox.checked = isChecked;
+                if (isChecked) {
+                  span.style.textDecoration = 'line-through';
+                  span.style.color = 'grey';
+                }
+              }
+            } catch (error) {
+              console.error('Error fetching doc:', error);
+            }
+
+            // 2) On checkbox change, update Firestore
+            checkbox.addEventListener('change', async () => {
               if (checkbox.checked) {
                 span.style.textDecoration = 'line-through';
                 span.style.color = 'grey';
@@ -184,22 +243,33 @@
                 span.style.textDecoration = 'none';
                 span.style.color = '';
               }
+              try {
+                await setDoc(docRef, {
+                  checked: checkbox.checked,
+                  summary: event.summary,
+                  lastUpdate: new Date().toISOString()
+                });
+              } catch (err) {
+                console.error('Error updating Firestore:', err);
+              }
             });
 
             eventDiv.appendChild(checkbox);
             eventDiv.appendChild(span);
             eventsDiv.appendChild(eventDiv);
-          });
+          }
         }
       }
     }
 
-    // Load events for a specified date
+
+    /*************************************************************
+     * 4) Main "load events" workflow
+     *************************************************************/
     function loadEventsForDate(dateStr) {
       document.getElementById('events').innerHTML = 'Loading...';
       fetchICS(fullUrl)
         .then(data => {
-          console.log('Fetched data:', data);  // For debugging
           const icsData = parseICS(data);
           if (!icsData) {
             document.getElementById('events').innerHTML = 'Error parsing calendar data.';
