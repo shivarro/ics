@@ -38,11 +38,21 @@
       border-radius: 4px;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
       display: flex;
-      align-items: center;
+      align-items: flex-start; /* so multi-line doesn't misalign */
       gap: 10px;
     }
     .event-text {
       flex: 1;
+    }
+
+    /* Grid layout for comma-separated parts */
+    .csv-wrapper {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr); /* 3 columns */
+      gap: 8px;
+    }
+    .csv-part {
+      /* styling for each part if you want */
     }
   </style>
 </head>
@@ -84,17 +94,14 @@
     // Collection name in Firestore for storing checkbox states
     const COLLECTION_NAME = "tasks";
 
-
     /*************************************************************
      * 2) ICS-related constants and logic
      *************************************************************/
     // Your ICS calendar URL
     const ICS_URL = 'https://api-composite-cf.blueprintprep.com/cal/260d33c5-9c91-4eb5-b63a-f40e522f24bd?k=n-MBcRhe6JZP00Q4IUcbZ4qMxAH_Un-5XT75F4_tLKk%3D&s=8397&t=f';
 
-    // REPLACE the old proxy with your Netlify Functions endpoint
+    // Use your Netlify Functions endpoint
     const proxyBase = 'https://neon-stroopwafel-6b8ac9.netlify.app/.netlify/functions/ics-proxy?url=';
-
-    // Encode the ICS URL to safely include it in the query param
     const fullUrl = proxyBase + encodeURIComponent(ICS_URL);
 
     // Set default date input value to today's date
@@ -156,6 +163,15 @@
       return eventsForDate;
     }
 
+    // Remove prefix from HyGuru text, if present
+    function formatSummary(rawSummary) {
+      const prefix = "HyGuru USMLE Step 2 CK Rapid Review Course:";
+      if (rawSummary.startsWith(prefix)) {
+        return rawSummary.replace(prefix, "").trim();
+      }
+      return rawSummary;
+    }
+
     // Group events by category based on prefix
     function groupEvents(events) {
       const groups = {
@@ -180,7 +196,6 @@
       });
       return groups;
     }
-
 
     /*************************************************************
      * 3) Render events + Firestore load/save logic
@@ -215,7 +230,19 @@
             // Create span for event text
             const span = document.createElement('span');
             span.className = 'event-text';
-            span.textContent = event.summary;
+
+            // Format the summary for display (remove prefix, etc.)
+            const cleanedSummary = formatSummary(event.summary);
+
+            // Split by commas, then display in a 3-column grid
+            const parts = cleanedSummary.split(',');
+            span.innerHTML = `
+              <div class="csv-wrapper">
+                ${parts
+                  .map(part => `<div class="csv-part">${part.trim()}</div>`)
+                  .join('')}
+              </div>
+            `;
 
             // Firestore doc reference
             const docRef = doc(db, COLLECTION_NAME, event.docId);
@@ -228,6 +255,7 @@
                 const isChecked = data.checked === true;
                 checkbox.checked = isChecked;
                 if (isChecked) {
+                  // Style the text to indicate completion
                   span.style.textDecoration = 'line-through';
                   span.style.color = 'grey';
                 }
@@ -248,7 +276,7 @@
               try {
                 await setDoc(docRef, {
                   checked: checkbox.checked,
-                  summary: event.summary,
+                  summary: event.summary, // keep the original summary
                   lastUpdate: new Date().toISOString()
                 });
               } catch (err) {
@@ -263,7 +291,6 @@
         }
       }
     }
-
 
     /*************************************************************
      * 4) Main "load events" workflow
