@@ -52,7 +52,7 @@
       gap: 8px;
     }
     .csv-part {
-      /* styling for each part if you want */
+      /* styling for each part if you like */
     }
   </style>
 </head>
@@ -93,6 +93,7 @@
 
     // Collection name in Firestore for storing checkbox states
     const COLLECTION_NAME = "tasks";
+
 
     /*************************************************************
      * 2) ICS-related constants and logic
@@ -197,19 +198,6 @@
       return groups;
     }
 
-    /**
-     * Sort each group's events by the first CSV part
-     * (i.e. the text before the first comma) once the prefix is removed.
-     */
-    function sortGroupEvents(groups) {
-      for (const groupName in groups) {
-        groups[groupName].sort((a, b) => {
-          const aClean = formatSummary(a.summary).split(',')[0].trim().toLowerCase();
-          const bClean = formatSummary(b.summary).split(',')[0].trim().toLowerCase();
-          return aClean.localeCompare(bClean);
-        });
-      }
-    }
 
     /*************************************************************
      * 3) Render events + Firestore load/save logic
@@ -221,16 +209,23 @@
         return;
       }
 
-      // Group events first
+      // 1) Group them as before
       const groups = groupEvents(events);
 
-      // Now sort each group by the first CSV part
-      sortGroupEvents(groups);
+      // 2) Sort each group's array by the first comma-separated chunk
+      //    after removing prefix (so items with the same 'Test Taking Strategy...' appear together).
+      for (const [groupName, groupArray] of Object.entries(groups)) {
+        groupArray.sort((a, b) => {
+          const aClean = formatSummary(a.summary).split(',')[0].trim();
+          const bClean = formatSummary(b.summary).split(',')[0].trim();
+          return aClean.localeCompare(bClean);
+        });
+      }
 
-      // Clear out the existing content
+      // Clear the events container
       eventsDiv.innerHTML = '';
 
-      // Render each group
+      // 3) Render each group in sorted order
       for (const [groupName, groupEvents] of Object.entries(groups)) {
         if (groupEvents.length > 0) {
           // Group header
@@ -253,11 +248,11 @@
             const span = document.createElement('span');
             span.className = 'event-text';
 
-            // Format the summary for display (remove prefix, etc.)
+            // Format the summary for display
             const cleanedSummary = formatSummary(event.summary);
-
-            // Split by commas, then display in a 3-column grid
             const parts = cleanedSummary.split(',');
+
+            // e.g. 3 columns in a grid
             span.innerHTML = `
               <div class="csv-wrapper">
                 ${parts
@@ -298,7 +293,7 @@
               try {
                 await setDoc(docRef, {
                   checked: checkbox.checked,
-                  summary: event.summary, // keep the original summary
+                  summary: event.summary, // store original
                   lastUpdate: new Date().toISOString()
                 });
               } catch (err) {
@@ -313,6 +308,7 @@
         }
       }
     }
+
 
     /*************************************************************
      * 4) Main "load events" workflow
