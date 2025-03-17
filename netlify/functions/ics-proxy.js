@@ -1,7 +1,5 @@
 // netlify/functions/ics-proxy.js
 
-import fetch from 'node-fetch';
-
 export async function handler(event, context) {
   try {
     // 1) Read "url" query param
