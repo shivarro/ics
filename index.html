@@ -45,14 +45,20 @@
       flex: 1;
     }
 
-    /* Grid layout for comma-separated parts */
-    .csv-wrapper {
+    /* 2-column layout */
+    .csv-wrapper-2 {
       display: grid;
-      grid-template-columns: repeat(3, 1fr); /* 3 columns */
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    /* 3-column layout */
+    .csv-wrapper-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
       gap: 8px;
     }
     .csv-part {
-      /* styling for each part if you like */
+      /* styling for each part if needed */
     }
   </style>
 </head>
@@ -173,6 +179,42 @@
       return rawSummary;
     }
 
+    /**
+     * Splits the cleaned summary into up to 3 pieces:
+     * - col1 = the first chunk (if any)
+     * - col3 = the LAST chunk (quantity)
+     * - col2 = everything in between the first chunk and the last chunk
+     *
+     * Examples:
+     *   "Title, Something else, 5 minutes" -> col1="Title", col2="Something else", col3="5 minutes"
+     *   "SingleTask" -> col1="SingleTask", col2="", col3=""
+     *   "Title, 10 questions" -> col1="Title", col2="", col3="10 questions"
+     */
+    function splitForDisplay(cleanedSummary) {
+      const parts = cleanedSummary.split(',').map(p => p.trim());
+      if (parts.length === 0) {
+        return ["", "", ""];
+      } else if (parts.length === 1) {
+        // Only one piece
+        return [parts[0], "", ""];
+      } else {
+        // If 2 or more
+        // last chunk is quantity
+        const col3 = parts.pop(); // e.g. "5 minutes"
+        const col1 = parts.shift(); // e.g. "Title"
+        // everything else is col2
+        const col2 = parts.join(', '); // merge leftover middle parts
+        return [col1, col2, col3];
+      }
+    }
+
+    // Sort by the first chunk (col1)
+    function getFirstColumnForSort(rawSummary) {
+      const cleaned = formatSummary(rawSummary);
+      const [col1] = splitForDisplay(cleaned);
+      return col1;
+    }
+
     // Group events by category based on prefix
     function groupEvents(events) {
       const groups = {
@@ -212,13 +254,12 @@
       // 1) Group them as before
       const groups = groupEvents(events);
 
-      // 2) Sort each group's array by the first comma-separated chunk
-      //    after removing prefix (so items with the same 'Test Taking Strategy...' appear together).
+      // 2) Sort each group's array by the first column
       for (const [groupName, groupArray] of Object.entries(groups)) {
         groupArray.sort((a, b) => {
-          const aClean = formatSummary(a.summary).split(',')[0].trim();
-          const bClean = formatSummary(b.summary).split(',')[0].trim();
-          return aClean.localeCompare(bClean);
+          const aCol = getFirstColumnForSort(a.summary);
+          const bCol = getFirstColumnForSort(b.summary);
+          return aCol.localeCompare(bCol);
         });
       }
 
@@ -248,18 +289,32 @@
             const span = document.createElement('span');
             span.className = 'event-text';
 
-            // Format the summary for display
+            // 4) Format the summary for display
             const cleanedSummary = formatSummary(event.summary);
-            const parts = cleanedSummary.split(',');
+            const [col1, col2, col3] = splitForDisplay(cleanedSummary);
 
-            // e.g. 3 columns in a grid
-            span.innerHTML = `
-              <div class="csv-wrapper">
-                ${parts
-                  .map(part => `<div class="csv-part">${part.trim()}</div>`)
-                  .join('')}
-              </div>
-            `;
+            // Decide if we show 2 columns or 3 columns
+            // - If col3 is empty => 2 columns
+            // - Otherwise => 3 columns
+            if (col3) {
+              // 3 columns
+              span.innerHTML = `
+                <div class="csv-wrapper-3">
+                  <div class="csv-part">${col1}</div>
+                  <div class="csv-part">${col2}</div>
+                  <div class="csv-part">${col3}</div>
+                </div>
+              `;
+            } else {
+              // 2 columns
+              // If col2 is also empty, it will just show the first column
+              span.innerHTML = `
+                <div class="csv-wrapper-2">
+                  <div class="csv-part">${col1}</div>
+                  <div class="csv-part">${col2}</div>
+                </div>
+              `;
+            }
 
             // Firestore doc reference
             const docRef = doc(db, COLLECTION_NAME, event.docId);
@@ -293,7 +348,7 @@
               try {
                 await setDoc(docRef, {
                   checked: checkbox.checked,
-                  summary: event.summary, // store original
+                  summary: event.summary, // store original text
                   lastUpdate: new Date().toISOString()
                 });
               } catch (err) {
@@ -308,7 +363,6 @@
         }
       }
     }
-
 
     /*************************************************************
      * 4) Main "load events" workflow
