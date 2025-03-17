@@ -197,6 +197,20 @@
       return groups;
     }
 
+    /**
+     * Sort each group's events by the first CSV part
+     * (i.e. the text before the first comma) once the prefix is removed.
+     */
+    function sortGroupEvents(groups) {
+      for (const groupName in groups) {
+        groups[groupName].sort((a, b) => {
+          const aClean = formatSummary(a.summary).split(',')[0].trim().toLowerCase();
+          const bClean = formatSummary(b.summary).split(',')[0].trim().toLowerCase();
+          return aClean.localeCompare(bClean);
+        });
+      }
+    }
+
     /*************************************************************
      * 3) Render events + Firestore load/save logic
      *************************************************************/
@@ -206,9 +220,17 @@
         eventsDiv.innerHTML = '<p>No events for this day.</p>';
         return;
       }
+
+      // Group events first
       const groups = groupEvents(events);
+
+      // Now sort each group by the first CSV part
+      sortGroupEvents(groups);
+
+      // Clear out the existing content
       eventsDiv.innerHTML = '';
 
+      // Render each group
       for (const [groupName, groupEvents] of Object.entries(groups)) {
         if (groupEvents.length > 0) {
           // Group header
