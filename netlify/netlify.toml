@@ -1,1 +1,10 @@
+[build]
+  # No special build command if you're not building a framework project
+  command = ""
+  # You may or may not have a publish directory, 
+  # especially if you only want to serve functions from Netlify
+  publish = "."
+
+[functions]
+  directory = "netlify/functions"
 
