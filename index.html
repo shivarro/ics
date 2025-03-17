@@ -90,9 +90,11 @@
      *************************************************************/
     // Your ICS calendar URL
     const ICS_URL = 'https://api-composite-cf.blueprintprep.com/cal/260d33c5-9c91-4eb5-b63a-f40e522f24bd?k=n-MBcRhe6JZP00Q4IUcbZ4qMxAH_Un-5XT75F4_tLKk%3D&s=8397&t=f';
-    
-    // Proxy to bypass CORS issues
-    const proxyBase = 'https://api.cors.lol/?url=';
+
+    // REPLACE the old proxy with your Netlify Functions endpoint
+    const proxyBase = 'https://neon-stroopwafel-6b8ac9.netlify.app/.netlify/functions/ics-proxy?url=';
+
+    // Encode the ICS URL to safely include it in the query param
     const fullUrl = proxyBase + encodeURIComponent(ICS_URL);
 
     // Set default date input value to today's date
